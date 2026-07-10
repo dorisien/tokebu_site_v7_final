@@ -150,7 +150,7 @@
 
         <div class="form-row">
           <label>배팅금액(원)
-            <input type="number" id="f-stake" step="1000" min="0" placeholder="예) 10000" required>
+            <input type="number" id="f-stake" step="1" min="0" placeholder="예) 10000" required>
           </label>
           <label>결과
             <select id="f-result">
@@ -298,14 +298,6 @@
       <h2 class="card-title">경기 일정 · 통계 · 배당률 참고 사이트</h2>
       <p class="hint-text">베팅을 중개하지 않는 참고용 정보 사이트입니다. 경기 일정, 팀 기록, 배당률 비교 등을 확인할 때 참고하세요.</p>
       <div class="info-link-list">
-        <a class="info-link" href="https://www.flashscore.co.kr" target="_blank" rel="noopener noreferrer">
-          <span class="info-link-icon">⚡</span>
-          <span class="info-link-body">
-            <span class="info-link-title">플래시스코어 (Flashscore)</span>
-            <span class="info-link-desc">flashscore.co.kr · 실시간 스코어, 경기 일정·기록, 배당률 비교</span>
-          </span>
-          <span class="info-link-arrow">↗</span>
-        </a>
         <a class="info-link" href="https://sports.news.naver.com" target="_blank" rel="noopener noreferrer">
           <span class="info-link-icon">📰</span>
           <span class="info-link-body">
@@ -314,11 +306,35 @@
           </span>
           <span class="info-link-arrow">↗</span>
         </a>
-        <a class="info-link" href="https://www.livesport.com/kr/" target="_blank" rel="noopener noreferrer">
+        <a class="info-link" href="https://contests.covers.com/" target="_blank" rel="noopener noreferrer">
+          <span class="info-link-icon">📈</span>
+          <span class="info-link-body">
+            <span class="info-link-title">커버스 콘테스트 (Covers Contests)</span>
+            <span class="info-link-desc">contests.covers.com · 무료 픽 콘테스트, 배당률·전문가 분석 참고</span>
+          </span>
+          <span class="info-link-arrow">↗</span>
+        </a>
+        <a class="info-link" href="https://www.mlb.com/" target="_blank" rel="noopener noreferrer">
+          <span class="info-link-icon">⚾</span>
+          <span class="info-link-body">
+            <span class="info-link-title">MLB 공식 사이트</span>
+            <span class="info-link-desc">mlb.com · 메이저리그 야구 일정·기록·뉴스</span>
+          </span>
+          <span class="info-link-arrow">↗</span>
+        </a>
+        <a class="info-link" href="https://www.nba.com/" target="_blank" rel="noopener noreferrer">
+          <span class="info-link-icon">🏀</span>
+          <span class="info-link-body">
+            <span class="info-link-title">NBA 공식 사이트</span>
+            <span class="info-link-desc">nba.com · NBA 경기 일정·기록·뉴스</span>
+          </span>
+          <span class="info-link-arrow">↗</span>
+        </a>
+        <a class="info-link" href="https://www.statiz.co.kr/" target="_blank" rel="noopener noreferrer">
           <span class="info-link-icon">📊</span>
           <span class="info-link-body">
-            <span class="info-link-title">라이브스포트 (Livesport)</span>
-            <span class="info-link-desc">livesport.com/kr · 다종목 실시간 스코어·순위·기록</span>
+            <span class="info-link-title">스탯티즈 (STATIZ)</span>
+            <span class="info-link-desc">statiz.co.kr · KBO 리그 세부 통계·세이버메트릭스</span>
           </span>
           <span class="info-link-arrow">↗</span>
         </a>
@@ -395,7 +411,13 @@
     <div class="card">
       <h2 class="card-title">안내</h2>
       <p class="hint-text">토계부는 배팅을 권유하거나 중개하지 않는 개인 기록용 도구입니다. 책임감 있는 배팅 습관을 위해 예산을 정하고 지키세요.</p>
-      <p class="hint-text"><a href="guide.html">배팅 용어·뱅크롤 관리 가이드</a> · <a href="faq.html">자주 묻는 질문</a> · <a href="about.html">소개</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="terms.html">이용약관</a></p>
+      <nav class="quick-links">
+        <a href="guide.html">배팅 용어·뱅크롤 관리 가이드</a>
+        <a href="faq.html">자주 묻는 질문</a>
+        <a href="about.html">소개</a>
+        <a href="privacy.html">개인정보처리방침</a>
+        <a href="terms.html">이용약관</a>
+      </nav>
     </div>
   </section>
 
@@ -405,7 +427,14 @@
 </main>
 
 <footer class="app-footer">
-  <p>© 2026 토계부 · <a href="guide.html">가이드</a> · <a href="faq.html">FAQ</a> · <a href="about.html">소개</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="terms.html">이용약관</a></p>
+  <p class="app-footer-copyright">© 2026 토계부</p>
+  <nav class="footer-links">
+    <a href="guide.html">가이드</a>
+    <a href="faq.html">FAQ</a>
+    <a href="about.html">소개</a>
+    <a href="privacy.html">개인정보처리방침</a>
+    <a href="terms.html">이용약관</a>
+  </nav>
 </footer>
 
 <script src="js/chart.umd.min.js"></script>

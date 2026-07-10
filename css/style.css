@@ -450,3 +450,32 @@ input:focus, select:focus { outline: 1px solid var(--accent); }
   padding: 20px 16px;
 }
 .app-footer a { color: var(--text-dim); }
+.app-footer-copyright { margin: 0; }
+
+.footer-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+}
+.footer-links a {
+  display: block;
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+.footer-links a:hover { color: var(--accent); }
+
+.quick-links {
+  display: flex;
+  flex-direction: column;
+}
+.quick-links a {
+  display: block;
+  padding: 10px 2px;
+  color: var(--text);
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
+}
+.quick-links a:last-child { border-bottom: none; }
+.quick-links a:hover { color: var(--accent); }
