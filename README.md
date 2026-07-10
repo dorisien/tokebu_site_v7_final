@@ -1,29 +1,51 @@
 # 토계부 (Toto + 가계부)
 
-스포츠 배팅 내역을 가계부처럼 기록하는 웹앱입니다. 회원가입이 없고, 모든 데이터는 방문자의 브라우저(localStorage)에만 저장됩니다.
+스포츠 배팅 내역을 가계부처럼 기록하는 웹앱입니다. 회원가입이 없고, 모든 데이터는 방문자의 브라우저(localStorage)에만 저장됩니다. PWA로 지원되어 모바일에서 "홈 화면에 추가"하면 앱처럼 사용할 수 있습니다.
+
+## 주요 기능
+
+- **기록**: 단일 배팅뿐 아니라 여러 경기를 묶는 폴더(콤보) 배팅도 지원. 합산 배당률 자동 계산.
+- **북메이커 기록**: 어느 사이트에서 배팅했는지 함께 기록(자동완성 지원).
+- **즐겨찾기 팀**: 자주 배팅하는 팀 이름을 등록해 클릭 한 번으로 입력.
+- **통계**: 누적 손익, 종목별 성적, 적중/실패 비율, 연승·연패 기록. 전체/이번 달/지난 달/기간 지정 필터 지원.
+- **캘린더**: 날짜별 손익을 한눈에 확인.
+- **예산 관리**: 월 배팅/손실 한도를 설정하면 초과 시 기록 탭에 경고 표시.
+- **백업/복원**: JSON·CSV 내보내기, JSON·CSV 가져오기 (단, 폴더 배팅 기록은 CSV로 가져올 수 없어 JSON 백업을 권장).
+- **PWA**: manifest + 서비스 워커로 홈 화면 설치 및 기본적인 오프라인 사용 지원.
 
 ## 파일 구조
 
 ```
 tokebu/
-├── index.html          메인 앱 (기록 / 통계 / 캘린더 / 설정 탭)
-├── privacy.html         개인정보처리방침
-├── terms.html            이용약관
+├── index.html            메인 앱 (기록 / 통계 / 캘린더 / 설정 탭)
+├── guide.html             배팅 용어 · 뱅크롤 관리 가이드
+├── faq.html               자주 묻는 질문
+├── about.html             서비스 소개
+├── privacy.html           개인정보처리방침
+├── terms.html             이용약관
 ├── ads.txt                애드센스 승인 후 퍼블리셔 ID로 교체
+├── robots.txt             검색엔진 크롤링 설정 (배포 후 도메인 교체 필요)
+├── sitemap.xml            사이트맵 (배포 후 도메인 교체 필요)
+├── manifest.json          PWA 매니페스트
+├── service-worker.js      PWA 오프라인 캐싱
+├── icons/                 PWA 아이콘 (192px, 512px)
 ├── css/style.css
-├── js/app.js             전체 로직 (localStorage 기반, 서버 없음)
-└── android-wrap/         안드로이드 앱 래핑용 Capacitor 설정
+├── js/
+│   ├── app.js              전체 로직 (localStorage 기반, 서버 없음)
+│   └── chart.umd.min.js    Chart.js (로컬 호스팅, 외부 CDN 미사용)
+└── android-wrap/          안드로이드 앱 래핑용 Capacitor 설정
     ├── capacitor.config.json
     ├── package.json
-    └── www/index.html    오프라인 폴백 페이지
+    └── www/index.html      오프라인 폴백 페이지
 ```
 
-로컬에서 바로 확인하려면 `tokebu` 폴더에서 `python3 -m http.server 8000` 실행 후 `localhost:8000` 접속하면 됩니다.
+로컬에서 바로 확인하려면 `tokebu` 폴더에서 `python3 -m http.server 8000` 실행 후 `localhost:8000` 접속하면 됩니다. (index.html을 더블클릭해서 file://로 여는 방식은 localStorage·서비스 워커가 제한될 수 있어 권장하지 않습니다.)
 
 ---
 
-## 1단계. 웹사이트 무료 배포 (Vercel)
+## 1단계. 웹사이트 무료 배포 (Vercel 또는 GitHub Pages)
 
+### Vercel
 1. [vercel.com](https://vercel.com) 가입 (GitHub 계정으로 가능)
 2. 방법 A — **드래그 앤 드롭 (가장 간단)**: Vercel 대시보드에서 "Add New → Project → 폴더 드래그" 로 `tokebu` 폴더를 그대로 올리면 끝. 별도 빌드 과정이 없는 정적 사이트라 바로 배포됩니다.
 3. 방법 B — **CLI 사용**:
@@ -35,7 +57,14 @@ tokebu/
 4. 배포가 끝나면 `https://프로젝트명.vercel.app` 형태의 주소가 발급됩니다. 이후 Vercel 설정에서 원하는 커스텀 도메인(예: tokebu.co.kr)을 연결할 수 있습니다 (도메인은 별도 구매 필요).
 5. **애드센스 심사를 통과하려면 도메인 소유 사실이 명확해야 하므로, 무료 `.vercel.app` 서브도메인보다는 자체 도메인을 구매해 연결하는 것을 권장합니다.**
 
+### GitHub Pages
+1. GitHub 저장소를 Public으로 설정 (Pages 무료 기능은 Public 저장소에서만 지원).
+2. 저장소 Settings → Pages → Source를 "Deploy from a branch" → Branch를 `main` / `(root)`로 설정 후 저장.
+3. 1~2분 후 `https://사용자명.github.io/저장소이름/` 주소로 접속 가능.
+
 배포 후 `index.html`, `privacy.html`, `terms.html`이 모두 정상 로드되는지, 기록 추가/통계/캘린더 탭이 잘 동작하는지 확인하세요.
+
+**배포 주소가 정해지면 꼭 해야 할 것**: `robots.txt`와 `sitemap.xml`에 있는 `REPLACE-WITH-YOUR-DOMAIN` 부분을 실제 배포 주소로 교체한 뒤 다시 배포하세요.
 
 ---
 
@@ -57,7 +86,9 @@ tokebu/
    npx cap open android
    ```
 3. Android Studio가 열리면 상단 메뉴에서 `Build → Generate Signed Bundle / APK`로 서명된 앱(AAB 또는 APK)을 생성합니다. 서명 키(keystore)는 최초 1회 직접 생성해야 하며 분실 시 업데이트가 불가능하니 안전하게 보관하세요.
-4. 앱 아이콘/스플래시 화면은 `android-wrap/android/app/src/main/res` 폴더의 리소스를 교체해 변경할 수 있습니다.
+4. 앱 아이콘/스플래시 화면은 `android-wrap/android/app/src/main/res` 폴더의 리소스를 교체해 변경할 수 있습니다. `icons/icon-512.png`를 원본으로 활용할 수 있습니다.
+
+> 참고: 웹앱 자체가 PWA로 설치 가능하므로, 정식 스토어 등록 전 임시로 사용자에게 "홈 화면에 추가"를 안내하는 것도 방법입니다.
 
 ### 플레이스토어 등록
 1. [Google Play Console](https://play.google.com/console) 접속 → **개발자 계정 등록비 25달러(1회)** 결제, 본인 인증 필요 (이 부분은 본인이 직접 진행해야 합니다).
@@ -84,7 +115,7 @@ tokebu/
      승인 후 발급받은 `client=ca-pub-...` 값으로 교체하고 주석을 해제하세요.
    - `ads.txt` 파일의 `pub-0000000000000000` 부분도 실제 발급받은 퍼블리셔 ID로 교체 후 재배포하세요.
 4. 심사 신청 → 보통 수일~수 주 소요. 통과하면 광고 유닛을 만들고, `index.html`의 `ad-slot-top` / `ad-slot-bottom` 자리(주석 표시된 부분)에 발급받은 광고 코드를 넣으면 됩니다.
-5. **주의**: 도박성 콘텐츠에 대한 애드센스 정책이 엄격합니다. 실제 베팅 중개 기능이 없는 "개인 기록 관리 도구"라는 점을 사이트 첫 화면과 소개 문구에 분명히 밝혀두면 심사에 유리합니다 (이미 `index.html`과 `terms.html`에 해당 문구를 넣어두었습니다). 그래도 정책 위반으로 반려될 수 있으니 [AdSense 프로그램 정책](https://support.google.com/adsense/answer/48182)의 도박 관련 항목을 직접 확인하시길 권합니다.
+5. **주의**: 도박성 콘텐츠에 대한 애드센스 정책이 엄격합니다. 실제 베팅 중개 기능이 없는 "개인 기록 관리 도구"라는 점을 사이트 첫 화면과 소개 문구에 분명히 밝혀두면 심사에 유리합니다 (이미 `index.html`, `terms.html`, `about.html`에 해당 문구를 넣어두었습니다). 그래도 정책 위반으로 반려될 수 있으니 [AdSense 프로그램 정책](https://support.google.com/adsense/answer/48182)의 도박 관련 항목을 직접 확인하시길 권합니다.
 
 ---
 
@@ -92,4 +123,5 @@ tokebu/
 
 - 이 사이트/앱은 배팅을 중개하거나 권유하지 않는 **개인 기록 관리 도구**입니다. 실제 스포츠 베팅은 국내에서 허가된 스포츠토토(배트맨) 등 공식 채널을 통해서만 합법입니다.
 - 로그인이 없는 구조라 데이터는 기기별로 분리 저장됩니다. 설정 탭의 백업(JSON/CSV) 기능을 이용자에게 안내해 데이터 유실을 예방하세요.
+- 폴더(콤보) 배팅 기록은 CSV로 내보낼 수는 있지만, CSV로 다시 가져올 때는 단일 배팅으로만 복원됩니다. 완전한 백업/복원은 JSON을 사용하세요.
 - 향후 여러 기기 간 동기화, 회원 로그인, 실시간 배당률 연동 등을 추가하려면 별도 백엔드/DB 구축이 필요합니다.

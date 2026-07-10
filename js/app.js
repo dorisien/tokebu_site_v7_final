@@ -1129,6 +1129,37 @@ if ('serviceWorker' in navigator && typeof location !== 'undefined' && location.
   });
 }
 
+// ---------- PWA: 설치 버튼 ----------
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const card = document.getElementById('pwaInstallCard');
+  if (card) card.hidden = false;
+});
+
+const installAppBtn = document.getElementById('installAppBtn');
+if (installAppBtn) {
+  installAppBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    try {
+      await deferredInstallPrompt.userChoice;
+    } catch (e) {
+      // 사용자가 설치 대화상자를 닫은 경우 등은 무시
+    }
+    deferredInstallPrompt = null;
+    const card = document.getElementById('pwaInstallCard');
+    if (card) card.hidden = true;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  const card = document.getElementById('pwaInstallCard');
+  if (card) card.hidden = true;
+  deferredInstallPrompt = null;
+});
+
 // ---------- 초기 렌더 ----------
 function renderAll() {
   renderSummary();
