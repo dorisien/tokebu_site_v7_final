@@ -3,7 +3,10 @@
 
 const STORAGE_KEY = 'tokebu_bets_v1';
 const LAST_BACKUP_KEY = 'tokebu_last_backup_v1';
+const FAV_TEAMS_KEY = 'tokebu_fav_teams_v1';
+const BUDGET_KEY = 'tokebu_budget_v1';
 const BACKUP_REMIND_DAYS = 3;
+const SPORTS = ['축구', '야구', '농구', '배구', 'e스포츠', '기타', '폴더'];
 
 // ---------- 데이터 계층 ----------
 function loadBets() {
@@ -31,6 +34,79 @@ function saveBets(bets) {
 function showStorageWarning() {
   const el = document.getElementById('storageWarning');
   if (el) el.hidden = false;
+}
+
+// ---------- 즐겨찾기 팀 ----------
+function loadFavTeams() {
+  try {
+    const raw = localStorage.getItem(FAV_TEAMS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveFavTeams(list) {
+  try {
+    localStorage.setItem(FAV_TEAMS_KEY, JSON.stringify(list));
+  } catch (e) {
+    // 저장이 막힌 환경이면 조용히 무시 (storageWarning이 이미 안내함)
+  }
+}
+
+// ---------- 예산/손실 한도 ----------
+function loadBudget() {
+  try {
+    const raw = localStorage.getItem(BUDGET_KEY);
+    return raw ? JSON.parse(raw) : { monthlyStakeLimit: null, monthlyLossLimit: null };
+  } catch (e) {
+    return { monthlyStakeLimit: null, monthlyLossLimit: null };
+  }
+}
+
+function saveBudget(b) {
+  try {
+    localStorage.setItem(BUDGET_KEY, JSON.stringify(b));
+  } catch (e) {
+    // 저장이 막힌 환경이면 조용히 무시
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 옛 데이터(match 문자열)와 새 데이터(home/away)를 함께 지원
+function splitMatch(matchStr) {
+  const parts = String(matchStr || '').split(/\s+vs\.?\s+/i);
+  if (parts.length === 2) return { home: parts[0].trim(), away: parts[1].trim() };
+  return { home: (matchStr || '').trim(), away: '' };
+}
+
+function getHomeAway(bet) {
+  if (bet.home || bet.away) return { home: bet.home || '', away: bet.away || '' };
+  return splitMatch(bet.match);
+}
+
+function matchLabel(bet) {
+  const { home, away } = getHomeAway(bet);
+  return [home, away].filter(Boolean).join(' vs ');
+}
+
+// 폴더(콤보) 배팅까지 포함한 표시용 라벨
+function betLabel(bet) {
+  if (bet.betMode === 'combo' && Array.isArray(bet.legs)) {
+    return bet.legs.map(l => [l.home, l.away].filter(Boolean).join(' vs ')).filter(Boolean).join(' / ');
+  }
+  return matchLabel(bet);
+}
+
+function betTypeLabel(bet) {
+  if (bet.betMode === 'combo' && Array.isArray(bet.legs)) {
+    return `폴더 ${bet.legs.length}경기`;
+  }
+  return bet.betType || '';
 }
 
 // ---------- 백업 알림 ----------
@@ -100,7 +176,13 @@ function calcProfit(bet) {
 }
 
 let bets = loadBets();
+let favTeams = loadFavTeams();
+let budget = loadBudget();
+let lastFocusedTeamField = 'home';
 let editingId = null;
+let betMode = 'single';
+let legCounter = 0;
+let statsPeriod = { mode: 'all', from: null, to: null };
 let calState = (() => {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() }; // month: 0-indexed
@@ -119,48 +201,211 @@ document.getElementById('tabNav').addEventListener('click', (e) => {
   if (btn.dataset.tab === 'calendar') renderCalendar();
 });
 
-// ---------- 폼 ----------
+// ---------- 폼: 단일/폴더 모드 토글 ----------
+const modeSingleBtn = document.getElementById('modeSingleBtn');
+const modeComboBtn = document.getElementById('modeComboBtn');
+const singleModeFields = document.getElementById('singleModeFields');
+const comboModeFields = document.getElementById('comboModeFields');
+
+function setBetMode(mode) {
+  betMode = mode;
+  if (modeSingleBtn) modeSingleBtn.classList.toggle('active', mode === 'single');
+  if (modeComboBtn) modeComboBtn.classList.toggle('active', mode === 'combo');
+  if (singleModeFields) singleModeFields.hidden = mode !== 'single';
+  if (comboModeFields) comboModeFields.hidden = mode !== 'combo';
+  if (mode === 'combo' && document.querySelectorAll('.leg-box').length < 2) {
+    resetLegs();
+  }
+}
+
+if (modeSingleBtn) modeSingleBtn.addEventListener('click', () => setBetMode('single'));
+if (modeComboBtn) modeComboBtn.addEventListener('click', () => setBetMode('combo'));
+
+// ---------- 폼: 폴더 배팅 다리(leg) 관리 ----------
+function legTemplate(index) {
+  return `
+    <div class="leg-box" data-leg-index="${index}">
+      <div class="leg-box-header">
+        <span class="leg-box-title">경기 ${index + 1}</span>
+        <button type="button" class="icon-btn leg-remove-btn" title="삭제">🗑️</button>
+      </div>
+      <div class="form-row">
+        <label>스포츠
+          <select class="leg-sport">
+            <option value="축구">⚽ 축구</option>
+            <option value="야구">⚾ 야구</option>
+            <option value="농구">🏀 농구</option>
+            <option value="배구">🏐 배구</option>
+            <option value="e스포츠">🎮 e스포츠</option>
+            <option value="기타">🔹 기타</option>
+          </select>
+        </label>
+        <label>배당률
+          <input type="number" class="leg-odds" step="0.01" min="1" placeholder="예) 1.95">
+        </label>
+      </div>
+      <div class="form-row">
+        <label>홈 팀
+          <input type="text" class="leg-home" placeholder="홈팀">
+        </label>
+        <label>원정 팀
+          <input type="text" class="leg-away" placeholder="원정팀">
+        </label>
+      </div>
+      <div class="form-row form-row-full">
+        <label>베팅 유형
+          <input type="text" class="leg-bettype" placeholder="예) 승무패, 핸디캡">
+        </label>
+      </div>
+    </div>`;
+}
+
+function addLegRow(prefill) {
+  const legsList = document.getElementById('legsList');
+  if (!legsList) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = legTemplate(legCounter++).trim();
+  const legEl = wrapper.firstElementChild;
+  legsList.appendChild(legEl);
+  if (prefill) {
+    legEl.querySelector('.leg-sport').value = prefill.sport || '축구';
+    legEl.querySelector('.leg-home').value = prefill.home || '';
+    legEl.querySelector('.leg-away').value = prefill.away || '';
+    legEl.querySelector('.leg-bettype').value = prefill.betType || '';
+    legEl.querySelector('.leg-odds').value = prefill.odds != null && !isNaN(prefill.odds) ? prefill.odds : '';
+  }
+  updateComboOddsPreview();
+}
+
+function resetLegs() {
+  const legsList = document.getElementById('legsList');
+  if (!legsList) return;
+  legsList.innerHTML = '';
+  legCounter = 0;
+  addLegRow();
+  addLegRow();
+}
+
+function readLegs() {
+  return Array.from(document.querySelectorAll('.leg-box')).map(box => ({
+    sport: box.querySelector('.leg-sport').value,
+    home: box.querySelector('.leg-home').value.trim(),
+    away: box.querySelector('.leg-away').value.trim(),
+    betType: box.querySelector('.leg-bettype').value.trim(),
+    odds: parseFloat(box.querySelector('.leg-odds').value),
+  }));
+}
+
+function comboOdds(legs) {
+  return legs.reduce((acc, l) => acc * (Number(l.odds) > 0 ? Number(l.odds) : 1), 1);
+}
+
+function updateComboOddsPreview() {
+  const preview = document.getElementById('comboOddsPreview');
+  if (!preview) return;
+  const legs = readLegs();
+  const valid = legs.length > 0 && legs.every(l => !isNaN(l.odds) && l.odds > 0);
+  preview.textContent = valid
+    ? `합산 배당률: ${comboOdds(legs).toFixed(2)}배 (${legs.length}경기)`
+    : '각 경기의 배당률을 입력하면 합산 배당률이 자동 계산됩니다.';
+}
+
+const addLegBtn = document.getElementById('addLegBtn');
+if (addLegBtn) addLegBtn.addEventListener('click', () => addLegRow());
+
+const legsListEl = document.getElementById('legsList');
+if (legsListEl) {
+  legsListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.leg-remove-btn');
+    if (!btn) return;
+    if (document.querySelectorAll('.leg-box').length <= 2) {
+      alert('폴더 배팅은 최소 2경기 이상이어야 합니다.');
+      return;
+    }
+    btn.closest('.leg-box').remove();
+    updateComboOddsPreview();
+  });
+  legsListEl.addEventListener('input', (e) => {
+    if (e.target.classList.contains('leg-odds')) updateComboOddsPreview();
+  });
+}
+
+resetLegs();
+
+// ---------- 폼: 제출/수정 ----------
 const form = document.getElementById('betForm');
 const submitBtn = document.getElementById('submitBtn');
 const cancelEditBtn = document.getElementById('cancelEditBtn');
 
 document.getElementById('f-date').valueAsDate = new Date();
 
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const data = {
-    date: document.getElementById('f-date').value,
-    sport: document.getElementById('f-sport').value,
-    match: document.getElementById('f-match').value.trim(),
-    betType: document.getElementById('f-bettype').value.trim(),
-    odds: parseFloat(document.getElementById('f-odds').value),
-    stake: parseFloat(document.getElementById('f-stake').value),
-    result: document.getElementById('f-result').value,
-    memo: document.getElementById('f-memo').value.trim(),
-  };
-  if (!data.date || !data.sport || isNaN(data.odds) || isNaN(data.stake)) return;
-
-  if (editingId) {
-    const idx = bets.findIndex(b => b.id === editingId);
-    if (idx > -1) bets[idx] = { ...bets[idx], ...data };
-    editingId = null;
-    submitBtn.textContent = '기록 추가';
-    cancelEditBtn.hidden = true;
-  } else {
-    bets.push({ id: uid(), ...data });
-  }
-  saveBets(bets);
-  form.reset();
-  document.getElementById('f-date').valueAsDate = new Date();
-  renderAll();
-});
-
-cancelEditBtn.addEventListener('click', () => {
+function resetFormState() {
   editingId = null;
   form.reset();
   document.getElementById('f-date').valueAsDate = new Date();
   submitBtn.textContent = '기록 추가';
   cancelEditBtn.hidden = true;
+  setBetMode('single');
+  resetLegs();
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  let data;
+
+  if (betMode === 'combo') {
+    const legs = readLegs();
+    if (legs.length < 2) { alert('폴더 배팅은 최소 2경기 이상 입력해 주세요.'); return; }
+    if (legs.some(l => !l.home && !l.away)) { alert('모든 경기의 팀 이름을 입력해 주세요.'); return; }
+    if (legs.some(l => isNaN(l.odds) || l.odds <= 0)) { alert('모든 경기의 배당률을 입력해 주세요.'); return; }
+    const stake = parseFloat(document.getElementById('f-stake').value);
+    const dateVal = document.getElementById('f-date').value;
+    if (!dateVal || isNaN(stake)) return;
+    data = {
+      date: dateVal,
+      betMode: 'combo',
+      sport: '폴더',
+      legs,
+      odds: +comboOdds(legs).toFixed(4),
+      bookmaker: document.getElementById('f-bookmaker').value.trim(),
+      stake,
+      result: document.getElementById('f-result').value,
+      memo: document.getElementById('f-memo').value.trim(),
+    };
+  } else {
+    const dateVal = document.getElementById('f-date').value;
+    const sport = document.getElementById('f-sport').value;
+    const odds = parseFloat(document.getElementById('f-odds').value);
+    const stake = parseFloat(document.getElementById('f-stake').value);
+    if (!dateVal || !sport || isNaN(odds) || isNaN(stake)) return;
+    data = {
+      date: dateVal,
+      betMode: 'single',
+      sport,
+      home: document.getElementById('f-home').value.trim(),
+      away: document.getElementById('f-away').value.trim(),
+      betType: document.getElementById('f-bettype').value.trim(),
+      odds,
+      bookmaker: document.getElementById('f-bookmaker').value.trim(),
+      stake,
+      result: document.getElementById('f-result').value,
+      memo: document.getElementById('f-memo').value.trim(),
+    };
+  }
+
+  if (editingId) {
+    const idx = bets.findIndex(b => b.id === editingId);
+    if (idx > -1) bets[idx] = { id: editingId, ...data };
+  } else {
+    bets.push({ id: uid(), ...data });
+  }
+  saveBets(bets);
+  resetFormState();
+  renderAll();
+});
+
+cancelEditBtn.addEventListener('click', () => {
+  resetFormState();
 });
 
 function startEdit(id) {
@@ -168,13 +413,27 @@ function startEdit(id) {
   if (!bet) return;
   editingId = id;
   document.getElementById('f-date').value = bet.date;
-  document.getElementById('f-sport').value = bet.sport;
-  document.getElementById('f-match').value = bet.match || '';
-  document.getElementById('f-bettype').value = bet.betType || '';
-  document.getElementById('f-odds').value = bet.odds;
+  document.getElementById('f-bookmaker').value = bet.bookmaker || '';
   document.getElementById('f-stake').value = bet.stake;
   document.getElementById('f-result').value = bet.result;
   document.getElementById('f-memo').value = bet.memo || '';
+
+  if (bet.betMode === 'combo' && Array.isArray(bet.legs)) {
+    setBetMode('combo');
+    const legsList = document.getElementById('legsList');
+    legsList.innerHTML = '';
+    legCounter = 0;
+    bet.legs.forEach(leg => addLegRow(leg));
+  } else {
+    setBetMode('single');
+    const { home, away } = getHomeAway(bet);
+    document.getElementById('f-sport').value = bet.sport;
+    document.getElementById('f-home').value = home;
+    document.getElementById('f-away').value = away;
+    document.getElementById('f-bettype').value = bet.betType || '';
+    document.getElementById('f-odds').value = bet.odds;
+  }
+
   submitBtn.textContent = '수정 완료';
   cancelEditBtn.hidden = false;
   document.getElementById('panel-record').scrollIntoView({ behavior: 'smooth' });
@@ -185,6 +444,72 @@ function deleteBet(id) {
   bets = bets.filter(b => b.id !== id);
   saveBets(bets);
   renderAll();
+}
+
+// ---------- 즐겨찾기 팀 UI ----------
+function renderFavTeams() {
+  const box = document.getElementById('favTeamsBox');
+  const chipsEl = document.getElementById('favTeamsChips');
+  if (!box || !chipsEl) return;
+  chipsEl.innerHTML = '';
+  if (!favTeams.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  favTeams.forEach(name => {
+    const chip = document.createElement('span');
+    chip.className = 'fav-chip';
+    const safeName = escapeHtml(name);
+    chip.innerHTML = `<button type="button" class="fav-chip-name" data-name="${safeName}">${safeName}</button><button type="button" class="fav-chip-remove" data-name="${safeName}" title="즐겨찾기에서 삭제">×</button>`;
+    chipsEl.appendChild(chip);
+  });
+}
+
+function addFavTeam(name) {
+  name = (name || '').trim();
+  if (!name || favTeams.includes(name)) return;
+  favTeams.push(name);
+  saveFavTeams(favTeams);
+  renderFavTeams();
+}
+
+const homeInput = document.getElementById('f-home');
+const awayInput = document.getElementById('f-away');
+if (homeInput) homeInput.addEventListener('focus', () => { lastFocusedTeamField = 'home'; });
+if (awayInput) awayInput.addEventListener('focus', () => { lastFocusedTeamField = 'away'; });
+
+const homeStarBtn = document.getElementById('f-home-star');
+const awayStarBtn = document.getElementById('f-away-star');
+if (homeStarBtn) homeStarBtn.addEventListener('click', () => addFavTeam(homeInput.value));
+if (awayStarBtn) awayStarBtn.addEventListener('click', () => addFavTeam(awayInput.value));
+
+const favTeamsChipsEl = document.getElementById('favTeamsChips');
+if (favTeamsChipsEl) {
+  favTeamsChipsEl.addEventListener('click', (e) => {
+    const nameBtn = e.target.closest('.fav-chip-name');
+    const removeBtn = e.target.closest('.fav-chip-remove');
+    if (nameBtn) {
+      const target = document.getElementById('f-' + lastFocusedTeamField);
+      if (target) target.value = nameBtn.dataset.name;
+      return;
+    }
+    if (removeBtn) {
+      favTeams = favTeams.filter(n => n !== removeBtn.dataset.name);
+      saveFavTeams(favTeams);
+      renderFavTeams();
+    }
+  });
+}
+
+renderFavTeams();
+
+// ---------- 북메이커 자동완성 ----------
+function renderBookmakerList() {
+  const list = document.getElementById('bookmakerList');
+  if (!list) return;
+  const names = Array.from(new Set(bets.map(b => b.bookmaker).filter(Boolean)));
+  list.innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
 }
 
 // ---------- 목록 렌더링 ----------
@@ -211,7 +536,8 @@ function renderList() {
     tr.innerHTML = `
       <td>${bet.date}</td>
       <td>${bet.sport}</td>
-      <td>${[bet.match, bet.betType].filter(Boolean).join(' · ') || '-'}</td>
+      <td>${[betLabel(bet), betTypeLabel(bet)].filter(Boolean).join(' · ') || '-'}</td>
+      <td>${bet.bookmaker || '-'}</td>
       <td>${bet.odds}</td>
       <td>${fmtWon(bet.stake)}</td>
       <td><span class="result-badge result-${bet.result}">${bet.result}</span></td>
@@ -275,17 +601,153 @@ function updatePendingHint() {
   });
 }
 
+// ---------- 예산/손실 한도 경고 ----------
+function updateBudgetWarning() {
+  const card = document.getElementById('budgetWarningCard');
+  const text = document.getElementById('budgetWarningText');
+  if (!card || !text) return;
+  if (!budget.monthlyStakeLimit && !budget.monthlyLossLimit) {
+    card.hidden = true;
+    return;
+  }
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthBets = bets.filter(b => b.date && b.date.startsWith(ym) && b.result !== '대기');
+  const monthStake = monthBets.reduce((s, b) => s + (Number(b.stake) || 0), 0);
+  const monthProfit = monthBets.reduce((s, b) => s + (calcProfit(b) || 0), 0);
+
+  const msgs = [];
+  if (budget.monthlyStakeLimit && monthStake > budget.monthlyStakeLimit) {
+    msgs.push(`⚠️ 이번 달 배팅 금액(${fmtWon(monthStake)})이 설정한 한도(${fmtWon(budget.monthlyStakeLimit)})를 초과했습니다.`);
+  }
+  if (budget.monthlyLossLimit && monthProfit < 0 && Math.abs(monthProfit) > budget.monthlyLossLimit) {
+    msgs.push(`⚠️ 이번 달 손실(${fmtWon(Math.abs(monthProfit))})이 설정한 한도(${fmtWon(budget.monthlyLossLimit)})를 초과했습니다. 잠시 쉬어가는 것도 좋은 선택입니다.`);
+  }
+  card.hidden = msgs.length === 0;
+  text.innerHTML = msgs.join('<br>');
+}
+
+const budgetLimitInput = document.getElementById('f-budget-limit');
+const lossLimitInput = document.getElementById('f-loss-limit');
+if (budgetLimitInput) budgetLimitInput.value = budget.monthlyStakeLimit ?? '';
+if (lossLimitInput) lossLimitInput.value = budget.monthlyLossLimit ?? '';
+
+const saveBudgetBtn = document.getElementById('saveBudgetBtn');
+if (saveBudgetBtn) {
+  saveBudgetBtn.addEventListener('click', () => {
+    const stakeLimit = parseFloat(budgetLimitInput.value);
+    const lossLimit = parseFloat(lossLimitInput.value);
+    budget = {
+      monthlyStakeLimit: isNaN(stakeLimit) ? null : stakeLimit,
+      monthlyLossLimit: isNaN(lossLimit) ? null : lossLimit,
+    };
+    saveBudget(budget);
+    alert('한도가 저장되었습니다.');
+    updateBudgetWarning();
+  });
+}
+
+const clearBudgetBtn = document.getElementById('clearBudgetBtn');
+if (clearBudgetBtn) {
+  clearBudgetBtn.addEventListener('click', () => {
+    budget = { monthlyStakeLimit: null, monthlyLossLimit: null };
+    saveBudget(budget);
+    if (budgetLimitInput) budgetLimitInput.value = '';
+    if (lossLimitInput) lossLimitInput.value = '';
+    updateBudgetWarning();
+  });
+}
+
+// ---------- 통계 탭: 기간 필터 ----------
+const statsPeriodBar = document.getElementById('statsPeriodBar');
+const customPeriodRow = document.getElementById('customPeriodRow');
+if (statsPeriodBar) {
+  statsPeriodBar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.period-btn');
+    if (!btn) return;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    statsPeriod.mode = btn.dataset.period;
+    if (customPeriodRow) customPeriodRow.hidden = statsPeriod.mode !== 'custom';
+    renderStats();
+  });
+}
+['statsFrom', 'statsTo'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', () => {
+    statsPeriod.from = document.getElementById('statsFrom').value || null;
+    statsPeriod.to = document.getElementById('statsTo').value || null;
+    if (statsPeriod.mode === 'custom') renderStats();
+  });
+});
+
+function getStatsDateRange() {
+  const now = new Date();
+  if (statsPeriod.mode === 'month') {
+    const y = now.getFullYear(), m = now.getMonth();
+    return { from: `${y}-${String(m + 1).padStart(2, '0')}-01`, to: localDateStr(new Date(y, m + 1, 0)) };
+  }
+  if (statsPeriod.mode === 'lastMonth') {
+    const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const m = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+    return { from: `${y}-${String(m + 1).padStart(2, '0')}-01`, to: localDateStr(new Date(y, m + 1, 0)) };
+  }
+  if (statsPeriod.mode === 'custom') {
+    return { from: statsPeriod.from, to: statsPeriod.to };
+  }
+  return { from: null, to: null };
+}
+
+// ---------- 통계 탭: 연승/연패 ----------
+function computeStreaks(allBets) {
+  const decided = allBets
+    .filter(b => b.result === '적중' || b.result === '실패')
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let bestWin = 0, bestLose = 0, runWin = 0, runLose = 0;
+  decided.forEach(b => {
+    if (b.result === '적중') { runWin++; runLose = 0; bestWin = Math.max(bestWin, runWin); }
+    else { runLose++; runWin = 0; bestLose = Math.max(bestLose, runLose); }
+  });
+
+  let current = 0, currentType = null;
+  for (let i = decided.length - 1; i >= 0; i--) {
+    const r = decided[i].result;
+    if (currentType === null) { currentType = r; current = 1; }
+    else if (r === currentType) current++;
+    else break;
+  }
+  return { current, currentType, bestWin, bestLose };
+}
+
+function renderStreaks() {
+  const grid = document.getElementById('streakGrid');
+  if (!grid) return;
+  const { current, currentType, bestWin, bestLose } = computeStreaks(bets);
+  const currentLabel = current === 0 ? '기록 없음' : `${current}연${currentType === '적중' ? '승' : '패'}`;
+  const currentClass = current === 0 ? '' : (currentType === '적중' ? 'positive' : 'negative');
+  grid.innerHTML = `
+    <div class="summary-item"><span class="summary-label">현재 연속</span><span class="summary-value ${currentClass}">${currentLabel}</span></div>
+    <div class="summary-item"><span class="summary-label">최고 연승</span><span class="summary-value positive">${bestWin}연승</span></div>
+    <div class="summary-item"><span class="summary-label">최고 연패</span><span class="summary-value negative">${bestLose}연패</span></div>`;
+}
+
 // ---------- 통계 탭 ----------
 let cumulativeChartInst, sportChartInst, resultChartInst;
 
 function renderStats() {
-  const resolved = bets.filter(b => b.result !== '대기').slice().sort((a, b) => a.date.localeCompare(b.date));
-  const sports = ['축구', '야구', '농구', '배구', 'e스포츠', '기타'];
+  const { from, to } = getStatsDateRange();
+  const inRange = (d) => (!from || d >= from) && (!to || d <= to);
+  const resolved = bets.filter(b => b.result !== '대기' && inRange(b.date)).slice().sort((a, b) => a.date.localeCompare(b.date));
+
+  renderStreaks();
 
   // 종목별 상세 테이블 (차트 라이브러리 로드 여부와 무관하게 항상 먼저 갱신)
   const tbody = document.getElementById('sportStatsBody');
   tbody.innerHTML = '';
-  sports.forEach(s => {
+  SPORTS.forEach(s => {
     const list = resolved.filter(b => b.sport === s);
     if (!list.length) return;
     const { totalStake, totalProfit, winRate, roi } = computeSummary(list);
@@ -300,8 +762,8 @@ function renderStats() {
     tbody.appendChild(tr);
   });
 
-  // 차트는 Chart.js(외부 CDN)가 정상적으로 로드된 경우에만 그립니다.
-  // 오프라인 상태 등으로 로드에 실패해도 위 표와 요약 카드는 항상 최신 상태를 보여줍니다.
+  // 차트는 Chart.js가 정상적으로 로드된 경우에만 그립니다.
+  // 로드에 실패해도 위 표와 요약 카드는 항상 최신 상태를 보여줍니다.
   let chartError = typeof Chart === 'undefined';
 
   if (!chartError) {
@@ -336,7 +798,7 @@ function renderStats() {
       });
 
       // 종목별 손익
-      const sportProfits = sports.map(s =>
+      const sportProfits = SPORTS.map(s =>
         resolved.filter(b => b.sport === s).reduce((sum, b) => sum + (calcProfit(b) || 0), 0)
       );
       const ctx2 = document.getElementById('sportChart');
@@ -344,7 +806,7 @@ function renderStats() {
       sportChartInst = new Chart(ctx2, {
         type: 'bar',
         data: {
-          labels: sports,
+          labels: SPORTS,
           datasets: [{
             label: '손익',
             data: sportProfits,
@@ -474,7 +936,8 @@ function showDayDetail(dateStr, dayBets) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${bet.sport}</td>
-      <td>${[bet.match, bet.betType].filter(Boolean).join(' · ') || '-'}</td>
+      <td>${[betLabel(bet), betTypeLabel(bet)].filter(Boolean).join(' · ') || '-'}</td>
+      <td>${bet.bookmaker || '-'}</td>
       <td>${bet.odds}</td>
       <td>${fmtWon(bet.stake)}</td>
       <td><span class="result-badge result-${bet.result}">${bet.result}</span></td>
@@ -505,11 +968,20 @@ function exportJson() {
 }
 
 function exportCsv() {
-  const header = ['날짜', '종목', '경기', '베팅유형', '배당률', '금액', '결과', '손익', '메모'];
-  const rows = bets.map(b => [
-    b.date, b.sport, b.match || '', b.betType || '', b.odds, b.stake, b.result,
-    calcProfit(b) ?? '', (b.memo || '').replace(/,/g, ' ')
-  ]);
+  const header = ['날짜', '종목', '홈팀', '원정팀', '베팅유형', '배당률', '금액', '결과', '손익', '메모', '북메이커'];
+  const rows = bets.map(b => {
+    let home, away;
+    if (b.betMode === 'combo' && Array.isArray(b.legs)) {
+      home = betLabel(b);
+      away = '';
+    } else {
+      ({ home, away } = getHomeAway(b));
+    }
+    return [
+      b.date, b.sport, home, away, betTypeLabel(b), b.odds, b.stake, b.result,
+      calcProfit(b) ?? '', (b.memo || '').replace(/,/g, ' '), b.bookmaker || ''
+    ];
+  });
   const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   downloadFile('﻿' + csv, 'tokebu_backup.csv', 'text/csv');
   markBackedUp();
@@ -554,6 +1026,92 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ---------- CSV 가져오기 ----------
+function parseCsv(text) {
+  text = text.replace(/^﻿/, '');
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n') {
+      row.push(field); rows.push(row); row = []; field = '';
+    } else if (c === '\r') {
+      // skip
+    } else {
+      field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => !(r.length === 1 && r[0] === ''));
+}
+
+function importCsvText(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) throw new Error('빈 파일입니다.');
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const iDate = idx('날짜'), iSport = idx('종목'), iHome = idx('홈팀'), iAway = idx('원정팀'),
+    iType = idx('베팅유형'), iOdds = idx('배당률'), iStake = idx('금액'), iResult = idx('결과'),
+    iMemo = idx('메모'), iBookmaker = idx('북메이커');
+
+  if (iDate === -1 || iOdds === -1 || iStake === -1 || iResult === -1) {
+    throw new Error('CSV 형식을 인식할 수 없습니다. 토계부에서 내보낸 CSV 형식을 사용해 주세요.');
+  }
+
+  return rows.slice(1)
+    .filter(r => r.length > 1 || r[0])
+    .map(r => ({
+      id: uid(),
+      date: r[iDate] || '',
+      betMode: 'single',
+      sport: (iSport > -1 && r[iSport]) ? r[iSport] : '기타',
+      home: iHome > -1 ? (r[iHome] || '') : '',
+      away: iAway > -1 ? (r[iAway] || '') : '',
+      betType: iType > -1 ? (r[iType] || '') : '',
+      odds: parseFloat(r[iOdds]),
+      bookmaker: iBookmaker > -1 ? (r[iBookmaker] || '') : '',
+      stake: parseFloat(r[iStake]),
+      result: r[iResult] || '대기',
+      memo: iMemo > -1 ? (r[iMemo] || '') : '',
+    }))
+    .filter(b => b.date && !isNaN(b.odds) && !isNaN(b.stake));
+}
+
+const importCsvFile = document.getElementById('importCsvFile');
+if (importCsvFile) {
+  importCsvFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = importCsvText(reader.result);
+        if (!imported.length) throw new Error('가져올 수 있는 기록이 없습니다.');
+        if (!confirm(`${imported.length}건의 기록을 CSV에서 가져옵니다. 기존 기록에 추가됩니다. 계속할까요?`)) return;
+        bets.push(...imported);
+        saveBets(bets);
+        renderAll();
+        alert('CSV 가져오기가 완료되었습니다.');
+      } catch (err) {
+        alert(err.message || '올바른 CSV 파일이 아닙니다.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+}
+
 document.getElementById('resetAllBtn').addEventListener('click', () => {
   if (!confirm('정말 모든 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
   if (!confirm('마지막 확인입니다. 삭제를 진행할까요?')) return;
@@ -562,11 +1120,22 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   renderAll();
 });
 
+// ---------- PWA: 서비스 워커 등록 ----------
+if ('serviceWorker' in navigator && typeof location !== 'undefined' && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {
+      // 서비스 워커 등록 실패는 조용히 무시 (오프라인 지원만 안 될 뿐 앱은 정상 동작)
+    });
+  });
+}
+
 // ---------- 초기 렌더 ----------
 function renderAll() {
   renderSummary();
   renderList();
+  renderBookmakerList();
   updateBackupStatus();
+  updateBudgetWarning();
   if (document.getElementById('panel-stats').classList.contains('active')) renderStats();
   if (document.getElementById('panel-calendar').classList.contains('active')) renderCalendar();
 }
