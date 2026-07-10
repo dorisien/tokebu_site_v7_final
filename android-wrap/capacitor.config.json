@@ -1,0 +1,13 @@
+{
+  "appId": "kr.tokebu.app",
+  "appName": "토계부",
+  "webDir": "www",
+  "server": {
+    "url": "https://REPLACE-WITH-YOUR-VERCEL-DOMAIN.vercel.app",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

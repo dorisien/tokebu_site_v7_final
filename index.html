@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>토계부 - 스포츠 배팅 가계부</title>
+<meta name="description" content="스포츠 배팅 내역을 가계부처럼 기록하고 수익률, 적중률, 캘린더로 한눈에 관리하세요. 회원가입 없이 무료로 사용할 수 있는 토계부입니다.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📒</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<!-- Google AdSense: 승인 후 아래에 발급받은 스크립트를 넣으세요 -->
+<!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script> -->
+</head>
+<body>
+
+<div id="storageWarning" class="storage-warning" hidden>
+  이 브라우저 환경에서는 기록 저장(localStorage)이 제한되어 있어 새로고침하면 기록이 사라질 수 있습니다. index.html을 더블클릭해서 열었다면, 대신 로컬 서버(README 참고)로 열거나 실제로 배포한 주소로 접속해 보세요.
+</div>
+
+<header class="app-header">
+  <div class="header-inner">
+    <h1 class="logo">📒 토계부</h1>
+    <p class="tagline">토토 + 가계부, 내 배팅을 기록하고 관리하세요</p>
+  </div>
+</header>
+
+<nav class="tab-nav" id="tabNav">
+  <button class="tab-btn active" data-tab="record">기록</button>
+  <button class="tab-btn" data-tab="stats">통계</button>
+  <button class="tab-btn" data-tab="calendar">캘린더</button>
+  <button class="tab-btn" data-tab="settings">설정</button>
+</nav>
+
+<main class="container">
+
+  <!-- 광고 슬롯 (상단) -->
+  <div class="ad-slot ad-slot-top" aria-hidden="true"><!-- 애드센스 승인 후 광고 유닛 삽입 위치 --></div>
+
+  <!-- ===== 기록 탭 ===== -->
+  <section class="tab-panel active" id="panel-record">
+
+    <div class="card summary-card" id="summaryCard">
+      <div class="summary-item">
+        <span class="summary-label">총 배팅금액</span>
+        <span class="summary-value" id="sumStake">0원</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">총 손익</span>
+        <span class="summary-value" id="sumProfit">0원</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">수익률</span>
+        <span class="summary-value" id="sumRoi">0%</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">적중률</span>
+        <span class="summary-value" id="sumWinRate">0%</span>
+      </div>
+    </div>
+    <p class="hint-text pending-hint" id="pendingHint" hidden></p>
+
+    <div class="card backup-reminder" id="backupReminder" hidden>
+      <p class="hint-text" id="backupReminderText"></p>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" id="backupNowBtn">지금 JSON으로 백업하기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">배팅 기록 추가</h2>
+      <form id="betForm" class="bet-form">
+        <div class="form-row">
+          <label>날짜
+            <input type="date" id="f-date" required>
+          </label>
+          <label>종목
+            <select id="f-sport" required>
+              <option value="축구">⚽ 축구</option>
+              <option value="야구">⚾ 야구</option>
+              <option value="농구">🏀 농구</option>
+              <option value="배구">🏐 배구</option>
+              <option value="e스포츠">🎮 e스포츠</option>
+              <option value="기타">🔹 기타</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>경기/매치
+            <input type="text" id="f-match" placeholder="예) 손흥민 FC vs 상대팀">
+          </label>
+          <label>베팅 유형
+            <input type="text" id="f-bettype" placeholder="예) 승무패, 핸디캡, 언더오버">
+          </label>
+        </div>
+        <div class="form-row">
+          <label>배당률
+            <input type="number" id="f-odds" step="0.01" min="1" placeholder="예) 1.95" required>
+          </label>
+          <label>배팅금액(원)
+            <input type="number" id="f-stake" step="1000" min="0" placeholder="예) 10000" required>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>결과
+            <select id="f-result">
+              <option value="대기">⏳ 대기</option>
+              <option value="적중">✅ 적중</option>
+              <option value="실패">❌ 실패</option>
+              <option value="취소">↩️ 적특/환불</option>
+            </select>
+          </label>
+          <label>메모
+            <input type="text" id="f-memo" placeholder="선택 입력">
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submitBtn">기록 추가</button>
+          <button type="button" class="btn btn-ghost" id="cancelEditBtn" hidden>수정 취소</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="list-header">
+        <h2 class="card-title">전체 기록</h2>
+        <div class="list-filters">
+          <select id="filterSport">
+            <option value="">전체 종목</option>
+            <option value="축구">축구</option>
+            <option value="야구">야구</option>
+            <option value="농구">농구</option>
+            <option value="배구">배구</option>
+            <option value="e스포츠">e스포츠</option>
+            <option value="기타">기타</option>
+          </select>
+          <select id="filterResult">
+            <option value="">전체 결과</option>
+            <option value="대기">대기</option>
+            <option value="적중">적중</option>
+            <option value="실패">실패</option>
+            <option value="취소">적특/환불</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="bet-table" id="betTable">
+          <thead>
+            <tr>
+              <th>날짜</th><th>종목</th><th>경기/유형</th><th>배당</th><th>금액</th><th>결과</th><th>손익</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="betTableBody"></tbody>
+        </table>
+        <p class="empty-msg" id="emptyMsg">아직 기록이 없습니다. 첫 배팅을 기록해보세요!</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 통계 탭 ===== -->
+  <section class="tab-panel" id="panel-stats">
+    <p class="hint-text pending-hint" id="pendingHintStats" hidden></p>
+    <p class="hint-text pending-hint" id="chartWarning" hidden>⚠️ 그래프 라이브러리를 불러오지 못했습니다 (인터넷 연결을 확인해 주세요). 아래 표에서는 정상적으로 통계를 확인할 수 있습니다.</p>
+    <div class="card">
+      <h2 class="card-title">누적 손익 추이</h2>
+      <canvas id="cumulativeChart" height="220"></canvas>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h2 class="card-title">종목별 손익</h2>
+        <canvas id="sportChart" height="220"></canvas>
+      </div>
+      <div class="card">
+        <h2 class="card-title">적중/실패 비율</h2>
+        <canvas id="resultChart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">종목별 상세 통계</h2>
+      <div class="table-wrap">
+        <table class="bet-table" id="sportStatsTable">
+          <thead><tr><th>종목</th><th>배팅건수</th><th>적중률</th><th>총 배팅금액</th><th>총 손익</th><th>수익률</th></tr></thead>
+          <tbody id="sportStatsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 캘린더 탭 ===== -->
+  <section class="tab-panel" id="panel-calendar">
+    <div class="card">
+      <div class="calendar-header">
+        <button class="btn btn-ghost" id="prevMonth">‹ 이전</button>
+        <h2 class="card-title" id="calMonthLabel">2026년 7월</h2>
+        <button class="btn btn-ghost" id="nextMonth">다음 ›</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+    <div class="card" id="dayDetailCard" hidden>
+      <h2 class="card-title" id="dayDetailTitle">선택한 날짜</h2>
+      <div class="table-wrap">
+        <table class="bet-table" id="dayDetailTable">
+          <thead><tr><th>종목</th><th>경기/유형</th><th>배당</th><th>금액</th><th>결과</th><th>손익</th></tr></thead>
+          <tbody id="dayDetailBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 설정 탭 ===== -->
+  <section class="tab-panel" id="panel-settings">
+    <div class="card">
+      <h2 class="card-title">데이터 백업</h2>
+      <p class="hint-text">모든 기록은 이 기기의 브라우저에만 저장됩니다. 기기를 바꾸거나 브라우저 데이터를 지우면 기록이 사라지니, 정기적으로 백업하는 것을 권장합니다.</p>
+      <p class="hint-text" id="lastBackupStatus"></p>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="exportJsonBtn">JSON으로 내보내기</button>
+        <button class="btn btn-primary" id="exportCsvBtn">CSV로 내보내기</button>
+        <label class="btn btn-ghost file-btn">
+          JSON 불러오기
+          <input type="file" id="importFile" accept="application/json" hidden>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">전체 초기화</h2>
+      <p class="hint-text">모든 기록을 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.</p>
+      <button class="btn btn-danger" id="resetAllBtn">모든 기록 삭제</button>
+    </div>
+    <div class="card">
+      <h2 class="card-title">안내</h2>
+      <p class="hint-text">토계부는 배팅을 권유하거나 중개하지 않는 개인 기록용 도구입니다. 책임감 있는 배팅 습관을 위해 예산을 정하고 지키세요.</p>
+      <p class="hint-text"><a href="guide.html">배팅 용어·뱅크롤 관리 가이드</a> · <a href="faq.html">자주 묻는 질문</a> · <a href="about.html">소개</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="terms.html">이용약관</a></p>
+    </div>
+  </section>
+
+  <!-- 광고 슬롯 (하단) -->
+  <div class="ad-slot ad-slot-bottom" aria-hidden="true"><!-- 애드센스 승인 후 광고 유닛 삽입 위치 --></div>
+
+</main>
+
+<footer class="app-footer">
+  <p>© 2026 토계부 · <a href="guide.html">가이드</a> · <a href="faq.html">FAQ</a> · <a href="about.html">소개</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="terms.html">이용약관</a></p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
