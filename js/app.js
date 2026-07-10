@@ -5,8 +5,60 @@ const STORAGE_KEY = 'tokebu_bets_v1';
 const LAST_BACKUP_KEY = 'tokebu_last_backup_v1';
 const FAV_TEAMS_KEY = 'tokebu_fav_teams_v1';
 const BUDGET_KEY = 'tokebu_budget_v1';
+const COOKIE_CONSENT_KEY = 'tokebu_cookie_consent_v1';
 const BACKUP_REMIND_DAYS = 3;
 const SPORTS = ['축구', '야구', '농구', '배구', 'e스포츠', '기타', '폴더'];
+
+// ---------- 쿠키 동의 ----------
+function getCookieConsent() {
+  try {
+    const raw = localStorage.getItem(COOKIE_CONSENT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCookieConsent(choice) {
+  try {
+    localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify({ choice, date: new Date().toISOString() }));
+  } catch (e) {
+    // 저장이 막힌 환경이면 배너가 방문마다 다시 뜰 수 있음
+  }
+}
+
+function initCookieConsent() {
+  const banner = document.getElementById('cookieConsent');
+  if (!banner) return;
+  if (!getCookieConsent()) banner.hidden = false;
+
+  const acceptBtn = document.getElementById('cookieAcceptBtn');
+  const declineBtn = document.getElementById('cookieDeclineBtn');
+  if (acceptBtn) {
+    acceptBtn.addEventListener('click', () => {
+      setCookieConsent('accepted');
+      banner.hidden = true;
+      // 애드센스 활성화 시 여기서 Google Consent Mode 업데이트 신호를 보낼 수 있습니다.
+      // 예: gtag('consent', 'update', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' });
+    });
+  }
+  if (declineBtn) {
+    declineBtn.addEventListener('click', () => {
+      setCookieConsent('declined');
+      banner.hidden = true;
+    });
+  }
+
+  const resetBtn = document.getElementById('resetCookieConsentSettingsBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      try { localStorage.removeItem(COOKIE_CONSENT_KEY); } catch (e) { /* 무시 */ }
+      banner.hidden = false;
+    });
+  }
+}
+
+initCookieConsent();
 
 // ---------- 데이터 계층 ----------
 function loadBets() {

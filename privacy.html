@@ -24,6 +24,8 @@
 
   <h2>2. 쿠키 및 광고(Google AdSense)</h2>
   <p>본 서비스는 Google AdSense를 통해 광고를 게재할 수 있습니다. Google을 비롯한 제3자 공급업체는 쿠키를 사용하여 이용자의 이전 방문 정보를 기반으로 광고를 게재합니다. Google의 광고 쿠키 사용으로 이용자는 본 서비스 및 다른 웹사이트 방문 기록을 기반으로 한 맞춤 광고를 볼 수 있습니다. 이용자는 <a href="https://adssettings.google.com" target="_blank" rel="noopener">Google 광고 설정</a>에서 맞춤 광고를 비활성화할 수 있습니다.</p>
+  <p>서비스 첫 방문 시 하단에 쿠키 사용에 대한 동의를 구하는 배너가 표시됩니다. "동의"를 선택하면 맞춤 광고를 포함한 쿠키 사용에 동의하는 것이며, "거부"를 선택하면 맞춤 광고 없이도 서비스를 계속 이용할 수 있습니다. 선택하신 내용은 이용자의 브라우저에만 저장되며, 아래 버튼으로 언제든지 다시 선택할 수 있습니다.</p>
+  <p><button type="button" id="resetCookieConsentBtn" class="btn btn-ghost">쿠키 동의 설정 초기화</button> <span id="resetCookieConsentMsg" class="hint-text" style="display:inline-block;margin-left:8px"></span></p>
 
   <h2>3. 정보의 보관 및 삭제</h2>
   <p>배팅 기록은 이용자의 브라우저에만 저장되므로, 브라우저 데이터(캐시/저장공간)를 삭제하거나 기기를 변경하면 기록도 함께 삭제됩니다. 서비스 운영자는 해당 데이터를 별도로 보관하지 않으며 복구할 수 없습니다.</p>
@@ -37,5 +39,15 @@
   <p><a href="index.html">← 홈으로 돌아가기</a></p>
 </main>
 <footer class="app-footer"><p>© 2026 토계부 · <a href="guide.html">가이드</a> · <a href="faq.html">FAQ</a> · <a href="about.html">소개</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="terms.html">이용약관</a></p></footer>
+<script>
+  document.getElementById('resetCookieConsentBtn').addEventListener('click', function () {
+    try {
+      localStorage.removeItem('tokebu_cookie_consent_v1');
+      document.getElementById('resetCookieConsentMsg').textContent = '초기화되었습니다. 토계부 홈으로 이동하면 배너가 다시 표시됩니다.';
+    } catch (e) {
+      document.getElementById('resetCookieConsentMsg').textContent = '이 브라우저에서는 저장소를 사용할 수 없어 초기화할 수 없습니다.';
+    }
+  });
+</script>
 </body>
 </html>
