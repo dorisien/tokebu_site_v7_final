@@ -566,12 +566,16 @@ function renderBookmakerList() {
 
 // ---------- 목록 렌더링 ----------
 const fmtWon = (n) => (n < 0 ? '-' : '') + Math.abs(Math.round(n)).toLocaleString('ko-KR') + '원';
+const LIST_PAGE_SIZE = 10;
+let listVisibleCount = LIST_PAGE_SIZE;
 
 function renderList() {
   const sportFilter = document.getElementById('filterSport').value;
   const resultFilter = document.getElementById('filterResult').value;
   const tbody = document.getElementById('betTableBody');
   const emptyMsg = document.getElementById('emptyMsg');
+  const listMoreRow = document.getElementById('listMoreRow');
+  const listCountHint = document.getElementById('listCountHint');
 
   let filtered = bets.filter(b =>
     (!sportFilter || b.sport === sportFilter) &&
@@ -582,7 +586,8 @@ function renderList() {
   tbody.innerHTML = '';
   emptyMsg.style.display = filtered.length ? 'none' : 'block';
 
-  filtered.forEach(bet => {
+  const visible = filtered.slice(0, listVisibleCount);
+  visible.forEach(bet => {
     const profit = calcProfit(bet);
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -602,6 +607,14 @@ function renderList() {
       </td>`;
     tbody.appendChild(tr);
   });
+
+  if (listMoreRow && listCountHint) {
+    const hasMore = filtered.length > visible.length;
+    listMoreRow.hidden = !filtered.length || !hasMore;
+    if (filtered.length) {
+      listCountHint.textContent = `${filtered.length}건 중 ${visible.length}건 표시 중`;
+    }
+  }
 }
 
 document.getElementById('betTableBody').addEventListener('click', (e) => {
@@ -612,8 +625,22 @@ document.getElementById('betTableBody').addEventListener('click', (e) => {
   if (btn.dataset.action === 'delete') deleteBet(id);
 });
 
-document.getElementById('filterSport').addEventListener('change', renderList);
-document.getElementById('filterResult').addEventListener('change', renderList);
+document.getElementById('filterSport').addEventListener('change', () => {
+  listVisibleCount = LIST_PAGE_SIZE;
+  renderList();
+});
+document.getElementById('filterResult').addEventListener('change', () => {
+  listVisibleCount = LIST_PAGE_SIZE;
+  renderList();
+});
+
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+if (loadMoreBtn) {
+  loadMoreBtn.addEventListener('click', () => {
+    listVisibleCount += LIST_PAGE_SIZE;
+    renderList();
+  });
+}
 
 // ---------- 요약 카드 ----------
 function computeSummary(list) {

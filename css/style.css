@@ -302,6 +302,15 @@ input:focus, select:focus { outline: 1px solid var(--accent); }
 .list-filters { display: flex; gap: 8px; }
 .list-filters select { padding: 6px 8px; font-size: 12px; }
 
+.list-more-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.list-more-row .hint-text { margin: 0; }
+
 .table-wrap { overflow-x: auto; }
 .bet-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bet-table th, .bet-table td {
